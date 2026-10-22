@@ -4,6 +4,18 @@
     <ProjectReference Include="..\HookGuard.Application\HookGuard.Application.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Pinned to the versions the Npgsql provider 10.0.3 was built against. Mixing a newer EF Core
+         with it produces MSB3277 assembly conflicts, and the framework would resolve the older
+         Relational assembly anyway. -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
+  </ItemGroup>
+
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

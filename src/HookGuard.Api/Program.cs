@@ -1,7 +1,15 @@
 using HookGuard.Application.Abstractions;
+using HookGuard.Infrastructure;
 using HookGuard.Infrastructure.Health;
+using HookGuard.Infrastructure.Persistence;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddHookGuardPersistence(
+    builder.Configuration.GetConnectionString("HookGuard")
+    ?? throw new InvalidOperationException(
+        "Connection string 'HookGuard' is not configured. Set ConnectionStrings:HookGuard."));
 
 // Composition root: one reachability probe per configured dependency. The ingest and management
 // endpoints arrive in phases 1 and 3; for now the API exists to prove the plumbing and to be
@@ -16,6 +24,14 @@ foreach (var dependency in builder.Configuration.GetSection("Dependencies").GetC
 }
 
 var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    // The documented quick start is `docker compose up` and nothing else, so development creates
+    // its own schema. Deployments apply migrations as a deliberate, separate step.
+    using var scope = app.Services.CreateScope();
+    await scope.ServiceProvider.GetRequiredService<HookGuardDbContext>().Database.MigrateAsync();
+}
 
 app.MapGet("/health/live", () => Results.Ok(new HealthReport("Healthy", [])));
 

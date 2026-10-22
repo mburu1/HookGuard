@@ -41,6 +41,12 @@ dotnet_naming_style.begins_with_i.capitalization = pascal_case
 [*.csproj]
 indent_size = 2
 
+# EF Core migrations are generated code: they are reviewed as SQL, not reformatted to house style
+# (they use block-scoped namespaces and indentation the rest of the solution does not).
+[**/Migrations/*.cs]
+generated_code = true
+dotnet_analyzer_diagnostic.severity = none
+
 [*.{json,yml,yaml,csproj,props,targets}]
 indent_size = 2
 

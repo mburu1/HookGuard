@@ -55,6 +55,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__HookGuard: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-hookguard};Username=${POSTGRES_USER:-hookguard};Password=${POSTGRES_PASSWORD:-hookguard}"
       Dependencies__Postgres: postgres:5432
       Dependencies__Redis: redis:6379
       Dependencies__RabbitMq: rabbitmq:5672

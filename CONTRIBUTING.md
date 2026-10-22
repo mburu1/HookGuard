@@ -15,6 +15,23 @@ dotnet test                   # unit, integration and architecture tests
 
 Requires the .NET 10 SDK (pinned in `global.json`) and Docker for the integration tests.
 
+### Database migrations
+
+The API creates its own schema on first boot in development, so `docker compose up` needs nothing
+extra. To run the API outside Docker, start Postgres and apply migrations explicitly:
+
+```bash
+docker compose up -d postgres
+dotnet tool restore
+dotnet ef database update --project src/HookGuard.Infrastructure --startup-project src/HookGuard.Infrastructure
+```
+
+Adding a migration goes through the same local tool:
+
+```bash
+dotnet ef migrations add <Name> --project src/HookGuard.Infrastructure --startup-project src/HookGuard.Infrastructure --output-dir Persistence/Migrations
+```
+
 ## Branching
 
 | Branch | Purpose |
