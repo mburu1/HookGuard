@@ -23,6 +23,28 @@ public class DeliveryTests
     }
 
     [Fact]
+    public void Counts_an_attempt_the_moment_the_delivery_is_claimed()
+    {
+        var delivery = Schedule();
+
+        delivery.BeginAttempt();
+
+        delivery.Status.Should().Be(DeliveryStatus.InFlight, "a claimed delivery is one somebody is working on");
+        delivery.AttemptCount.Should().Be(1, "a worker that dies mid-attempt has still spent the attempt");
+    }
+
+    [Fact]
+    public void Refuses_a_second_attempt_on_a_delivery_somebody_already_holds()
+    {
+        var delivery = Schedule();
+        delivery.BeginAttempt();
+
+        var act = delivery.BeginAttempt;
+
+        act.Should().Throw<InvalidOperationException>("two workers must not both count themselves as the attempt");
+    }
+
+    [Fact]
     public void Records_acceptance_and_clears_whatever_failed_before_it()
     {
         var delivery = Schedule();

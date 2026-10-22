@@ -4,6 +4,7 @@ using HookGuard.Application.Deliveries;
 using HookGuard.Domain.Deliveries;
 using HookGuard.Domain.Destinations;
 using HookGuard.Domain.Events;
+using HookGuard.Domain.Retry;
 using HookGuard.UnitTests.Fakes;
 
 namespace HookGuard.UnitTests.Deliveries;
@@ -28,7 +29,7 @@ public class DeliveryWorkerTests
         var claimed = Claimed();
         var store = new FakeDeliveryStore(claimed);
         var sender = new FakeDeliverySender();
-        var worker = new DeliveryWorker(store, sender, _clock);
+        var worker = new DeliveryWorker(store, sender, Retry());
 
         var processed = await worker.ProcessAsync(claimed.Delivery.Id, CancellationToken.None);
 
@@ -45,7 +46,7 @@ public class DeliveryWorkerTests
     {
         var store = new FakeDeliveryStore();
         var sender = new FakeDeliverySender();
-        var worker = new DeliveryWorker(store, sender, _clock);
+        var worker = new DeliveryWorker(store, sender, Retry());
 
         var processed = await worker.ProcessAsync(Guid.CreateVersion7(), CancellationToken.None);
 
@@ -60,7 +61,7 @@ public class DeliveryWorkerTests
         var claimed = Claimed();
         var store = new FakeDeliveryStore(claimed);
         var sender = new FakeDeliverySender();
-        var worker = new DeliveryWorker(store, sender, _clock);
+        var worker = new DeliveryWorker(store, sender, Retry());
 
         // The same message twice, which is exactly what at-least-once delivery allows. Only the
         // claim decides, so the second one is harmless rather than a second delivery.
@@ -71,18 +72,21 @@ public class DeliveryWorkerTests
     }
 
     [Fact]
-    public async Task Records_a_refusal_and_leaves_the_delivery_ready_for_another_attempt()
+    public async Task Records_a_refusal_and_schedules_the_retry_the_policy_asked_for()
     {
         var claimed = Claimed();
         var store = new FakeDeliveryStore(claimed);
         var sender = new FakeDeliverySender { Answer = _ => DeliveryResult.Refused(503) };
-        var worker = new DeliveryWorker(store, sender, _clock);
+        var worker = new DeliveryWorker(store, sender, Retry(draw: 750));
 
         (await worker.ProcessAsync(claimed.Delivery.Id, CancellationToken.None)).Should().BeTrue();
 
         claimed.Delivery.Status.Should().Be(DeliveryStatus.Pending, "a refused attempt is still owed a retry");
         claimed.Delivery.LastError.Should().Be("The destination answered HTTP 503.");
-        claimed.Delivery.NextAttemptAt.Should().Be(_clock.UtcNow);
+
+        // The worker only carries out the policy's answer: the wait is drawn from the first window, a
+        // second wide, so a jitter of 750 ms puts the next attempt at now plus 750 ms.
+        claimed.Delivery.NextAttemptAt.Should().Be(Now.AddMilliseconds(750));
         store.Recorded.Should().HaveCount(1);
     }
 
@@ -95,7 +99,7 @@ public class DeliveryWorkerTests
         {
             Answer = _ => new DeliveryResult(Succeeded: false, StatusCode: null, Error: null),
         };
-        var worker = new DeliveryWorker(store, sender, _clock);
+        var worker = new DeliveryWorker(store, sender, Retry());
 
         await worker.ProcessAsync(claimed.Delivery.Id, CancellationToken.None);
 
@@ -109,7 +113,7 @@ public class DeliveryWorkerTests
         var claimed = Claimed();
         var store = new FakeDeliveryStore(claimed);
         var sender = new FakeDeliverySender();
-        var worker = new DeliveryWorker(store, sender, _clock);
+        var worker = new DeliveryWorker(store, sender, Retry());
 
         await worker.ProcessAsync(claimed.Delivery.Id, CancellationToken.None);
 
@@ -151,4 +155,7 @@ public class DeliveryWorkerTests
             @event,
             destination);
     }
+
+    /// <param name="draw">The jitter the policy will settle on, in milliseconds.</param>
+    private RetryPolicy Retry(int draw = 0) => new(new FakeRandom(draw), _clock);
 }

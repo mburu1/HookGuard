@@ -1,7 +1,9 @@
 using HookGuard.Application.Deliveries;
 using HookGuard.Application.Outbox;
+using HookGuard.Domain.Retry;
 using HookGuard.Domain.Time;
 using HookGuard.Infrastructure;
+using HookGuard.Infrastructure.Randomness;
 using HookGuard.Infrastructure.Time;
 using HookGuard.Workers;
 
@@ -22,6 +24,8 @@ builder.Services.AddHookGuardDelivery();
 // Application services are registered here rather than in a self-contained extension so that the
 // composition root stays the single place that decides what the process is made of.
 builder.Services.AddSingleton<IClock, SystemClock>();
+builder.Services.AddSingleton<IRandom, SystemRandom>();
+builder.Services.AddSingleton<RetryPolicy>();
 builder.Services.AddScoped<OutboxRelay>();
 builder.Services.AddScoped<DeliveryWorker>();
 

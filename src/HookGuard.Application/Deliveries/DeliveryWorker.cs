@@ -1,5 +1,5 @@
 using HookGuard.Application.Abstractions;
-using HookGuard.Domain.Time;
+using HookGuard.Domain.Retry;
 
 namespace HookGuard.Application.Deliveries;
 
@@ -8,7 +8,7 @@ namespace HookGuard.Application.Deliveries;
 /// back. Everything about retrying hangs off the row this updates rather than off the message, which
 /// is why a message that arrives twice cannot produce two attempts.
 /// </summary>
-public sealed class DeliveryWorker(IDeliveryStore store, IDeliverySender sender, IClock clock)
+public sealed class DeliveryWorker(IDeliveryStore store, IDeliverySender sender, RetryPolicy retry)
 {
     /// <summary>
     /// Stands in for a failure that arrived without a reason, so the delivery row always carries one.
@@ -19,7 +19,7 @@ public sealed class DeliveryWorker(IDeliveryStore store, IDeliverySender sender,
 
     private readonly IDeliverySender _sender = sender ?? throw new ArgumentNullException(nameof(sender));
 
-    private readonly IClock _clock = clock ?? throw new ArgumentNullException(nameof(clock));
+    private readonly RetryPolicy _retry = retry ?? throw new ArgumentNullException(nameof(retry));
 
     /// <returns>
     /// <see langword="false"/> when there was no delivery to claim, which is what a duplicate or stale
@@ -42,10 +42,13 @@ public sealed class DeliveryWorker(IDeliveryStore store, IDeliverySender sender,
         }
         else
         {
-            // Due immediately, for now: what the delay should actually be is the retry policy's
-            // decision (M2.4), and nothing re-enqueues a Pending delivery until the scheduler sweep
-            // exists (M2.5), so this cannot turn into a spin.
-            claimed.Delivery.Fail(result.Error ?? UnexplainedFailure, _clock.UtcNow);
+            // Scheduled for when the retry policy says rather than immediately: the wait is what
+            // gives a destination that is struggling room to recover, and what keeps a backlog of
+            // failures from arriving at it all at once. Nothing re-enqueues a Pending delivery until
+            // the scheduler sweep exists (M2.5), so this cannot turn into a spin.
+            claimed.Delivery.Fail(
+                result.Error ?? UnexplainedFailure,
+                _retry.NextAttemptAt(claimed.Delivery.AttemptCount));
         }
 
         await _store.RecordOutcomeAsync(claimed.Delivery, cancellationToken).ConfigureAwait(false);

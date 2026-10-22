@@ -37,6 +37,10 @@ internal sealed class FakeDeliveryStore(ClaimedDelivery? claimable = null) : IDe
             return Task.FromResult<ClaimedDelivery?>(null);
         }
 
+        // The real store counts the attempt in the same statement that claims the row, so the delivery
+        // handed back already carries this attempt's number.
+        claimed.Delivery.BeginAttempt();
+
         return Task.FromResult<ClaimedDelivery?>(claimed);
     }
 

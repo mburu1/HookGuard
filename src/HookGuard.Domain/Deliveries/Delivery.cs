@@ -78,6 +78,29 @@ public sealed class Delivery
     public string? LastError { get; private set; }
 
     /// <summary>
+    /// Begins an attempt, which is the only way a delivery leaves <see cref="DeliveryStatus.Pending"/>.
+    /// The attempt is counted here because claiming is the moment it begins: a worker that dies
+    /// mid-attempt still leaves it counted, so a crash loop cannot retry for ever without spending
+    /// its budget.
+    /// </summary>
+    /// <remarks>
+    /// In production this transition is part of one guarded <c>UPDATE</c>, so that the database decides
+    /// which of two racing workers owns the delivery; this method is that same transition where it is
+    /// decided in memory instead.
+    /// </remarks>
+    public void BeginAttempt()
+    {
+        if (Status != DeliveryStatus.Pending)
+        {
+            throw new InvalidOperationException(
+                $"A delivery that is {Status} cannot begin another attempt.");
+        }
+
+        Status = DeliveryStatus.InFlight;
+        AttemptCount++;
+    }
+
+    /// <summary>
     /// Records that the destination accepted the payload. Nothing here counts the attempt: it was
     /// counted when the delivery was claimed, which is the moment an attempt began.
     /// </summary>
