@@ -2,7 +2,10 @@ using System.Globalization;
 using System.Text;
 using FluentAssertions;
 using HookGuard.Application.Ingest;
+using HookGuard.Domain.Deliveries;
+using HookGuard.Domain.Destinations;
 using HookGuard.Domain.Events;
+using HookGuard.Domain.Outbox;
 using HookGuard.Domain.Signatures;
 using HookGuard.Domain.Sources;
 using HookGuard.UnitTests.Fakes;
@@ -147,11 +150,110 @@ public class IngestEventHandlerTests
         _events.Stored[0].DedupeKey.Should().Be(EventDedupeKey.FromBody(Bytes(Body)));
     }
 
-    private Task<IngestResult> HandleAsync(string body, Dictionary<string, string> headers, Guid? sourceId = null) =>
-        HandlerFor(Source()).HandleAsync(sourceId ?? SourceId, headers, Bytes(body), CancellationToken.None);
+    [Fact]
+    public async Task Fans_out_one_delivery_per_active_destination()
+    {
+        var merchant = DestinationTo("https://merchant.example/hooks");
+        var ledger = DestinationTo("https://ledger.example/hooks");
 
-    private IngestEventHandler HandlerFor(Source source) =>
-        new(new FakeSourceRepository(source), _events, new SignatureVerifier(_clock), _clock);
+        var result = await HandleAsync(Body, SignedHeaders(Body), destinations: [merchant, ledger]);
+
+        result.Status.Should().Be(IngestStatus.Accepted);
+
+        var eventId = _events.Stored.Should().ContainSingle().Subject.Id;
+
+        _events.Deliveries.Should().HaveCount(2);
+        _events.Deliveries.Select(delivery => delivery.DestinationId)
+            .Should().BeEquivalentTo(new[] { merchant.Id, ledger.Id });
+        _events.Deliveries.Should().OnlyContain(delivery =>
+            delivery.EventId == eventId
+            && delivery.Status == DeliveryStatus.Pending
+            && delivery.AttemptCount == 0
+            && delivery.NextAttemptAt == _clock.UtcNow);
+        _events.Deliveries.Select(delivery => delivery.Id).Should().OnlyHaveUniqueItems();
+    }
+
+    [Fact]
+    public async Task Announces_every_delivery_on_the_outbox()
+    {
+        // The delivery is only durable if the message that will get it to a worker is durable too,
+        // so both are written by the same commit.
+        var result = await HandleAsync(Body, SignedHeaders(Body), destinations: [DestinationTo("https://merchant.example/hooks")]);
+
+        var delivery = _events.Deliveries.Should().ContainSingle().Subject;
+        var message = _events.Outbox.Should().ContainSingle().Subject;
+
+        result.Status.Should().Be(IngestStatus.Accepted);
+        message.Type.Should().Be(DeliveryDispatch.MessageType);
+        message.CreatedAt.Should().Be(_clock.UtcNow);
+        message.PublishedAt.Should().BeNull("the relay has not published it yet");
+        DeliveryDispatch.FromPayload(message.Payload).DeliveryId.Should().Be(delivery.Id);
+    }
+
+    [Fact]
+    public async Task Skips_a_deactivated_destination()
+    {
+        var active = DestinationTo("https://merchant.example/hooks");
+        var paused = DestinationTo("https://ledger.example/hooks", isActive: false);
+
+        await HandleAsync(Body, SignedHeaders(Body), destinations: [active, paused]);
+
+        _events.Deliveries.Select(delivery => delivery.DestinationId).Should().Equal(active.Id);
+    }
+
+    [Fact]
+    public async Task Stores_an_event_that_has_nowhere_to_go()
+    {
+        // A source can have no destinations yet. Dropping the event would lose a callback the
+        // provider believes was delivered, and it can still be replayed once a destination exists.
+        var result = await HandleAsync(Body, SignedHeaders(Body), destinations: []);
+
+        result.Status.Should().Be(IngestStatus.Accepted);
+        _events.Stored.Should().ContainSingle();
+        _events.Deliveries.Should().BeEmpty();
+        _events.Outbox.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Queues_no_second_delivery_for_a_callback_that_is_retried()
+    {
+        var handler = HandlerFor(Source(), DestinationTo("https://merchant.example/hooks"));
+        var headers = SignedHeaders(Body);
+
+        var first = await handler.HandleAsync(SourceId, headers, Bytes(Body), CancellationToken.None);
+        var second = await handler.HandleAsync(SourceId, headers, Bytes(Body), CancellationToken.None);
+
+        first.Status.Should().Be(IngestStatus.Accepted);
+        second.Status.Should().Be(IngestStatus.Duplicate);
+        _events.Deliveries.Should().ContainSingle("the second callback must not be delivered twice");
+        _events.Outbox.Should().ContainSingle();
+    }
+
+    private Task<IngestResult> HandleAsync(
+        string body,
+        Dictionary<string, string> headers,
+        Guid? sourceId = null,
+        Destination[]? destinations = null) =>
+        HandlerFor(Source(), destinations ?? [])
+            .HandleAsync(sourceId ?? SourceId, headers, Bytes(body), CancellationToken.None);
+
+    private IngestEventHandler HandlerFor(Source source, params Destination[] destinations) =>
+        new(
+            new FakeSourceRepository(source),
+            new FakeDestinationRepository(destinations),
+            _events,
+            new SignatureVerifier(_clock),
+            _clock);
+
+    private static Destination DestinationTo(string url, bool isActive = true) =>
+        Destination.Configure(
+            Guid.CreateVersion7(),
+            SourceId,
+            url,
+            "destination-signing-secret",
+            maxAttempts: 5,
+            timeout: TimeSpan.FromSeconds(10),
+            isActive: isActive);
 
     private static Source Source(TimeSpan? tolerance = null) =>
         new(SourceId, TenantId, "M-Pesa Paybill", Secret, SignatureScheme.TimestampBodyHmacSha256, tolerance ?? Tolerance);

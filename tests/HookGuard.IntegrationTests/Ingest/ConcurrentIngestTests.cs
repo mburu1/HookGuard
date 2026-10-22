@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using FluentAssertions;
 using HookGuard.Application.Ingest;
+using HookGuard.Domain.Destinations;
 using HookGuard.Domain.Signatures;
 using HookGuard.Domain.Sources;
 using HookGuard.Infrastructure.Persistence;
@@ -60,9 +61,18 @@ public sealed class ConcurrentIngestTests : IAsyncLifetime
             SignatureScheme.TimestampBodyHmacSha256,
             TimeSpan.FromMinutes(5));
 
+        var destination = Destination.Configure(
+            Guid.CreateVersion7(),
+            source.Id,
+            "https://merchant.example/hooks",
+            "destination-signing-secret",
+            maxAttempts: 5,
+            timeout: TimeSpan.FromSeconds(10));
+
         await using (var db = NewContext())
         {
             db.Sources.Add(source);
+            db.Destinations.Add(destination);
             await db.SaveChangesAsync();
         }
 
@@ -81,6 +91,11 @@ public sealed class ConcurrentIngestTests : IAsyncLifetime
         await using var check = NewContext();
 
         (await check.Events.CountAsync()).Should().Be(1);
+
+        // The fan-out commits with the event, so the duplicates cannot queue work either: one
+        // callback means exactly one delivery to attempt and one message announcing it.
+        (await check.Deliveries.CountAsync()).Should().Be(1);
+        (await check.OutboxMessages.CountAsync()).Should().Be(1);
     }
 
     private async Task<IngestResult> DeliverAsync(
@@ -94,6 +109,7 @@ public sealed class ConcurrentIngestTests : IAsyncLifetime
 
         var handler = new IngestEventHandler(
             new SourceRepository(db),
+            new DestinationRepository(db),
             new EventRepository(db),
             new SignatureVerifier(_clock),
             _clock);
