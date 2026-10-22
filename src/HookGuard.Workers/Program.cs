@@ -1,3 +1,4 @@
+using HookGuard.Application.Deliveries;
 using HookGuard.Application.Outbox;
 using HookGuard.Domain.Time;
 using HookGuard.Infrastructure;
@@ -16,13 +17,16 @@ builder.Services.AddHookGuardMessaging(
     ?? throw new InvalidOperationException(
         "Connection string 'RabbitMq' is not configured. Set ConnectionStrings:RabbitMq."));
 
+builder.Services.AddHookGuardDelivery();
+
 // Application services are registered here rather than in a self-contained extension so that the
 // composition root stays the single place that decides what the process is made of.
 builder.Services.AddSingleton<IClock, SystemClock>();
 builder.Services.AddScoped<OutboxRelay>();
+builder.Services.AddScoped<DeliveryWorker>();
 
-// Phase 2 adds the delivery workers and the retry scheduler here.
 builder.Services.AddHostedService<OutboxRelayService>();
+builder.Services.AddHostedService<DeliveryWorkerService>();
 
 var host = builder.Build();
 host.Run();

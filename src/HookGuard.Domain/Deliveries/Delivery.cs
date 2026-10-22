@@ -7,6 +7,13 @@ namespace HookGuard.Domain.Deliveries;
 /// </summary>
 public sealed class Delivery
 {
+    /// <summary>
+    /// Longest failure description the row can hold. A description longer than this is cut down to
+    /// fit rather than refused, because a talkative destination must not be the reason an attempt
+    /// goes unrecorded.
+    /// </summary>
+    public const int LastErrorMaxLength = 2000;
+
     private Delivery()
     {
         // Materialised by EF Core.
@@ -69,4 +76,31 @@ public sealed class Delivery
 
     /// <summary>Why the last attempt failed, as the worker saw it. Null until one has failed.</summary>
     public string? LastError { get; private set; }
+
+    /// <summary>
+    /// Records that the destination accepted the payload. Nothing here counts the attempt: it was
+    /// counted when the delivery was claimed, which is the moment an attempt began.
+    /// </summary>
+    public void Succeed()
+    {
+        Status = DeliveryStatus.Succeeded;
+        LastError = null;
+    }
+
+    /// <summary>
+    /// Records a failed attempt and puts the delivery back in line for another one.
+    /// </summary>
+    /// <param name="error">Why it failed, as the worker saw it.</param>
+    /// <param name="nextAttemptAt">
+    /// When the next attempt may start. Choosing that instant is the retry policy's business; the row
+    /// only carries the answer.
+    /// </param>
+    public void Fail(string error, DateTimeOffset nextAttemptAt)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(error);
+
+        Status = DeliveryStatus.Pending;
+        LastError = error.Length > LastErrorMaxLength ? error[..LastErrorMaxLength] : error;
+        NextAttemptAt = nextAttemptAt;
+    }
 }
