@@ -14,10 +14,11 @@ namespace HookGuard.Infrastructure.Messaging;
 /// to another worker — the queue is a nudge, so the delivery is not lost by the worker holding it.
 /// </para>
 /// <para>
-/// A message whose handler threw is dropped rather than requeued. Requeueing would spin the same
-/// undeliverable message through the queue at full speed, and it is not needed: the delivery row in
-/// the database is the record of what still has to happen, and the scheduler sweep re-enqueues it
-/// when its retry comes due.
+/// A message whose handler threw is dead-lettered rather than requeued. Requeueing would spin the
+/// same undeliverable message through the queue at full speed, and it is not needed: the delivery row
+/// in the database is the record of what still has to happen, and the scheduler sweep re-enqueues it
+/// when its retry comes due. Dead-lettering it rather than dropping it keeps the message itself
+/// inspectable too, so a message that could not even be turned into an attempt leaves evidence.
 /// </para>
 /// </remarks>
 public sealed class RabbitMqConsumer : IAsyncDisposable
@@ -46,8 +47,8 @@ public sealed class RabbitMqConsumer : IAsyncDisposable
     /// <summary>
     /// Consumes until <paramref name="cancellationToken"/> is cancelled, handing each delivery to
     /// <paramref name="handler"/> and acknowledging it only after the handler returned without
-    /// throwing. A handler that throws loses the message here, which is safe because the delivery row
-    /// is what actually schedules the retry.
+    /// throwing. A handler that throws sends the message to the dead-letter queue, which is safe
+    /// because the delivery row is what actually schedules the retry.
     /// </summary>
     public async Task ConsumeAsync(
         Func<QueueMessage, CancellationToken, Task> handler,
@@ -112,6 +113,8 @@ public sealed class RabbitMqConsumer : IAsyncDisposable
         }
         catch (Exception)
         {
+            // Requeue false, and the queue itself names a dead-letter exchange, so the broker parks
+            // this rather than handing it straight back to a worker that has just refused it.
             await SettleAsync(() => channel.BasicNackAsync(
                 delivery.DeliveryTag,
                 multiple: false,

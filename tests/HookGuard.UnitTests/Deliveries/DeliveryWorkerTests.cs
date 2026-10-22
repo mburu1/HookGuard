@@ -91,6 +91,24 @@ public class DeliveryWorkerTests
     }
 
     [Fact]
+    public async Task Parks_the_delivery_once_the_destination_has_had_every_attempt_it_allows()
+    {
+        var claimed = WithTheLastAttemptLeft();
+        var store = new FakeDeliveryStore(claimed);
+        var sender = new FakeDeliverySender { Answer = _ => DeliveryResult.Refused(503) };
+        var worker = new DeliveryWorker(store, sender, Retry());
+
+        (await worker.ProcessAsync(claimed.Delivery.Id, CancellationToken.None)).Should().BeTrue();
+
+        // The attempts the destination allows are spent, so the delivery is parked for somebody to
+        // look at instead of being retried again or dropped without trace.
+        claimed.Delivery.Status.Should().Be(DeliveryStatus.DeadLettered);
+        claimed.Delivery.LastError.Should().Be("The destination answered HTTP 503.");
+        claimed.Delivery.ClaimedAt.Should().BeNull("a parked delivery is nobody's to work on");
+        store.Recorded.Should().HaveCount(1, "the decision has to reach the row, not just the object");
+    }
+
+    [Fact]
     public async Task Stands_in_a_reason_when_the_attempt_failed_without_one()
     {
         var claimed = Claimed();
@@ -154,6 +172,23 @@ public class DeliveryWorkerTests
             Delivery.Schedule(Guid.CreateVersion7(), @event.Id, destination.Id, Now),
             @event,
             destination);
+    }
+
+    /// <summary>
+    /// The same delivery after every attempt but the last has been spent, so the claim the worker
+    /// makes is the final one the destination allows.
+    /// </summary>
+    private static ClaimedDelivery WithTheLastAttemptLeft()
+    {
+        var claimed = Claimed();
+
+        for (var attempt = 1; attempt < claimed.Destination.MaxAttempts; attempt++)
+        {
+            claimed.Delivery.BeginAttempt(Now);
+            claimed.Delivery.Fail("The destination answered HTTP 503.", Now);
+        }
+
+        return claimed;
     }
 
     /// <param name="draw">The jitter the policy will settle on, in milliseconds.</param>

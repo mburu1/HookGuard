@@ -9,10 +9,11 @@ using RabbitMQ.Client;
 namespace HookGuard.IntegrationTests.Messaging;
 
 /// <summary>
-/// M2.2. Prefetch and manual acknowledgements are promises about what a broker does with a message
-/// HookGuard has not finished with, so an in-memory double can only agree with itself. These run
-/// against a real queue: a worker holds no more than it prefetched, a delivery it is still working on
-/// is not off the queue, and a delivery the handler refused does not come straight back.
+/// M2.2 and M2.6. Prefetch and manual acknowledgements are promises about what a broker does with a
+/// message HookGuard has not finished with, so an in-memory double can only agree with itself. These
+/// run against a real queue: a worker holds no more than it prefetched, a delivery it is still
+/// working on is not off the queue, and a delivery the handler refused does not come straight back —
+/// it is parked in the dead-letter queue instead.
 /// </summary>
 public sealed class RabbitMqConsumerTests(RabbitMqFixture broker) : IClassFixture<RabbitMqFixture>, IAsyncLifetime
 {
@@ -60,18 +61,16 @@ public sealed class RabbitMqConsumerTests(RabbitMqFixture broker) : IClassFixtur
     }
 
     [Fact]
-    public async Task Drops_a_delivery_whose_handler_threw_instead_of_requeueing_it()
+    public async Task Parks_a_delivery_whose_handler_threw_where_it_can_still_be_read()
     {
         await PublishAsync(count: 1);
 
-        var handled = new int[1];
         var refused = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
 
         await WithConsumerAsync(
             prefetchCount: 1,
             (_, _) =>
             {
-                Interlocked.Increment(ref handled[0]);
                 refused.TrySetResult();
 
                 throw new InvalidOperationException("the destination rejected the payload");
@@ -81,10 +80,10 @@ public sealed class RabbitMqConsumerTests(RabbitMqFixture broker) : IClassFixtur
                 await refused.Task.WaitAsync(Timeout);
 
                 // Requeueing would put a message the handler cannot process straight back in front of
-                // it. It is dropped instead, and the delivery row in the database is what still
-                // schedules the retry.
+                // it, so the broker is told not to. It does not vanish: the queue dead-letters it, so
+                // what could not even be turned into an attempt is still there to be looked at.
                 await WaitForQueueDepthAsync(expected: 0);
-                Volatile.Read(ref handled[0]).Should().Be(1);
+                await WaitForDeadLetterDepthAsync(expected: 1);
             });
     }
 
@@ -195,9 +194,43 @@ public sealed class RabbitMqConsumerTests(RabbitMqFixture broker) : IClassFixtur
 
         await MessagingTopology.DeclareDeliveryQueueAsync(channel, passive: false, CancellationToken.None);
 
-        // A previous test may have left a delivery it never acknowledged; every test starts from an
-        // empty queue rather than from whatever ran before it.
+        // A previous test may have left a delivery it never acknowledged, or one the broker parked
+        // because the handler refused it; every test starts from empty queues rather than from
+        // whatever ran before it.
         await channel.QueuePurgeAsync(MessagingTopology.DeliveryDispatchQueue, CancellationToken.None);
+        await channel.QueuePurgeAsync(MessagingTopology.DeadLetterQueue, CancellationToken.None);
+    }
+
+    private async Task<uint> DeadLetterDepthAsync()
+    {
+        await using var connection = await ConnectionAsync();
+        await using var channel = await connection.CreateChannelAsync();
+
+        return (await channel.QueueDeclarePassiveAsync(MessagingTopology.DeadLetterQueue, CancellationToken.None))
+            .MessageCount;
+    }
+
+    private async Task WaitForDeadLetterDepthAsync(uint expected)
+    {
+        var stopwatch = Stopwatch.StartNew();
+
+        while (true)
+        {
+            var depth = await DeadLetterDepthAsync();
+
+            if (depth == expected)
+            {
+                return;
+            }
+
+            if (stopwatch.Elapsed > Timeout)
+            {
+                depth.Should().Be(expected, "a message a worker refused has to end up somewhere it can be read");
+                return;
+            }
+
+            await Task.Delay(TimeSpan.FromMilliseconds(100));
+        }
     }
 
     private async Task<uint> QueueDepthAsync()

@@ -8,9 +8,8 @@ namespace HookGuard.Domain.Deliveries;
 public sealed class Delivery
 {
     /// <summary>
-    /// Longest failure description the row can hold. A description longer than this is cut down to
-    /// fit rather than refused, because a talkative destination must not be the reason an attempt
-    /// goes unrecorded.
+    /// Longest failure description the row can hold. A longer one is cut down rather than refused;
+    /// see <see cref="Describe"/>.
     /// </summary>
     public const int LastErrorMaxLength = 2000;
 
@@ -121,6 +120,16 @@ public sealed class Delivery
     }
 
     /// <summary>
+    /// Whether the destination's attempt budget still allows another attempt.
+    /// </summary>
+    /// <param name="maxAttempts">How many attempts the destination allows in total.</param>
+    /// <remarks>
+    /// Attempts are counted when they are claimed rather than when they end, so the budget is spent
+    /// the moment the last allowed attempt is taken — including one the worker never came back from.
+    /// </remarks>
+    public bool HasAttemptsLeft(int maxAttempts) => AttemptCount < maxAttempts;
+
+    /// <summary>
     /// Records a failed attempt and puts the delivery back in line for another one.
     /// </summary>
     /// <param name="error">Why it failed, as the worker saw it.</param>
@@ -130,11 +139,38 @@ public sealed class Delivery
     /// </param>
     public void Fail(string error, DateTimeOffset nextAttemptAt)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(error);
-
         Status = DeliveryStatus.Pending;
-        LastError = error.Length > LastErrorMaxLength ? error[..LastErrorMaxLength] : error;
+        LastError = Describe(error);
         NextAttemptAt = nextAttemptAt;
         ClaimedAt = null;
+    }
+
+    /// <summary>
+    /// Parks the delivery: the attempts its destination allows are spent, so it stays exactly as the
+    /// last attempt left it and waits for somebody to inspect or replay it rather than being retried
+    /// for ever or dropped without trace.
+    /// </summary>
+    /// <param name="error">Why the last attempt failed, as the worker saw it.</param>
+    /// <remarks>
+    /// <see cref="NextAttemptAt"/> is deliberately left where it was. Nothing schedules a parked
+    /// delivery, and the instant it was last due for is part of what happened to it.
+    /// </remarks>
+    public void DeadLetter(string error)
+    {
+        Status = DeliveryStatus.DeadLettered;
+        LastError = Describe(error);
+        ClaimedAt = null;
+    }
+
+    /// <summary>
+    /// The reason as the row can hold it. A description longer than the column is cut down to fit
+    /// rather than refused, because a talkative destination must not be the reason an attempt goes
+    /// unrecorded.
+    /// </summary>
+    private static string Describe(string error)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(error);
+
+        return error.Length > LastErrorMaxLength ? error[..LastErrorMaxLength] : error;
     }
 }

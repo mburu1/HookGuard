@@ -113,6 +113,61 @@ public class DeliveryTests
         delivery.LastError.Should().HaveLength(Delivery.LastErrorMaxLength);
     }
 
+    [Fact]
+    public void Knows_when_the_destination_has_attempts_left()
+    {
+        var delivery = Schedule();
+
+        delivery.HasAttemptsLeft(maxAttempts: 2).Should().BeTrue("nothing has been attempted yet");
+
+        delivery.BeginAttempt(Now);
+        delivery.Fail("The destination answered HTTP 503.", Now);
+        delivery.BeginAttempt(Now);
+
+        // Two attempts allowed and two taken, so a third would be one the destination never agreed to
+        // serve. The second attempt was counted when it was claimed, not when it ended.
+        delivery.HasAttemptsLeft(maxAttempts: 2).Should().BeFalse();
+        delivery.AttemptCount.Should().Be(2);
+    }
+
+    [Fact]
+    public void Parks_a_delivery_whose_attempts_are_spent()
+    {
+        var delivery = Schedule();
+
+        delivery.DeadLetter("The destination answered HTTP 503.");
+
+        delivery.Status.Should().Be(
+            DeliveryStatus.DeadLettered,
+            "a spent attempt budget is a decision to stop rather than another wait");
+        delivery.LastError.Should().Be("The destination answered HTTP 503.", "the row keeps why it gave up");
+        delivery.ClaimedAt.Should().BeNull("a parked delivery is nobody's to work on");
+    }
+
+    [Fact]
+    public void Leaves_the_instant_it_was_last_due_for_alone_when_it_is_parked()
+    {
+        var delivery = Schedule();
+        var retryAt = Now.AddSeconds(30);
+        delivery.Fail("The destination answered HTTP 503.", retryAt);
+
+        delivery.DeadLetter("The destination answered HTTP 503.");
+
+        // Nothing schedules a parked delivery, and where it stood when it was still being retried is
+        // part of what happened to it.
+        delivery.NextAttemptAt.Should().Be(retryAt);
+    }
+
+    [Fact]
+    public void Rejects_parking_a_delivery_with_no_reason()
+    {
+        var delivery = Schedule();
+
+        var act = () => delivery.DeadLetter("   ");
+
+        act.Should().Throw<ArgumentException>("a parked delivery still has to say why it was given up on");
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("   ")]

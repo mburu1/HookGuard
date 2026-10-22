@@ -42,13 +42,21 @@ public sealed class DeliveryWorker(IDeliveryStore store, IDeliverySender sender,
         }
         else
         {
-            // Scheduled for when the retry policy says rather than immediately: the wait is what
-            // gives a destination that is struggling room to recover, and what keeps a backlog of
-            // failures from arriving at it all at once. Nothing re-enqueues a Pending delivery until
-            // the scheduler sweep exists (M2.5), so this cannot turn into a spin.
-            claimed.Delivery.Fail(
-                result.Error ?? UnexplainedFailure,
-                _retry.NextAttemptAt(claimed.Delivery.AttemptCount));
+            var error = result.Error ?? UnexplainedFailure;
+
+            // The budget is the destination's and the wait is the retry policy's, so the worker is
+            // where the two meet: it either puts the delivery back in line for when the policy says,
+            // or parks it once the last attempt the destination allows has been spent. The wait is
+            // what gives a struggling destination room to recover and keeps a backlog of failures
+            // from arriving at it all at once.
+            if (claimed.Delivery.HasAttemptsLeft(claimed.Destination.MaxAttempts))
+            {
+                claimed.Delivery.Fail(error, _retry.NextAttemptAt(claimed.Delivery.AttemptCount));
+            }
+            else
+            {
+                claimed.Delivery.DeadLetter(error);
+            }
         }
 
         await _store.RecordOutcomeAsync(claimed.Delivery, cancellationToken).ConfigureAwait(false);
