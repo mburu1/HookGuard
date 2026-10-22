@@ -265,8 +265,8 @@ hookguard/
 ## 10. Quick start
 
 ```bash
-git clone https://github.com/<you>/hookguard.git
-cd hookguard
+git clone https://github.com/mburu1/HookGuard.git
+cd HookGuard
 cp .env.example .env
 docker compose up --build
 ```
@@ -310,11 +310,14 @@ Estimates assume about 10 to 15 focused hours a week. **Each phase ends in somet
 
 ### Phase 0: Foundations (Week 1)
 
-- [ ] **M0.1** Repo created, MIT license, `.editorconfig`, branch protection, PR template
-- [ ] **M0.2** Solution scaffolded with the five projects and project references enforcing layering
-- [ ] **M0.3** `docker-compose.yml` with Postgres, Redis, RabbitMQ; `/health` endpoint
-- [ ] **M0.4** CI skeleton: restore, build, test, lint on every PR
-- [ ] **M0.5** ADR 0001 (stack) and ADR 0002 (clean architecture) written
+- [x] **M0.1** Repo created, MIT license, `.editorconfig`, branch protection, PR template
+- [x] **M0.2** Solution scaffolded with the five projects and project references enforcing layering
+- [x] **M0.3** `docker-compose.yml` with Postgres, Redis, RabbitMQ; `/health` endpoint
+- [x] **M0.4** CI skeleton: restore, build, test, lint on every PR
+- [x] **M0.5** ADR 0001 (stack) and ADR 0002 (clean architecture) written
+
+> Branch protection on `main` is a repository setting and still has to be enabled in GitHub
+> (Settings → Branches): require a pull request, require the `build, test and lint` check.
 
 **Done when:** a fresh clone runs `docker compose up` and CI is green.
 

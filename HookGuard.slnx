@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/HookGuard.Api/HookGuard.Api.csproj" />
+    <Project Path="src/HookGuard.Application/HookGuard.Application.csproj" />
+    <Project Path="src/HookGuard.Domain/HookGuard.Domain.csproj" />
+    <Project Path="src/HookGuard.FakeMerchant/HookGuard.FakeMerchant.csproj" />
+    <Project Path="src/HookGuard.Infrastructure/HookGuard.Infrastructure.csproj" />
+    <Project Path="src/HookGuard.Workers/HookGuard.Workers.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/HookGuard.ArchitectureTests/HookGuard.ArchitectureTests.csproj" />
+    <Project Path="tests/HookGuard.IntegrationTests/HookGuard.IntegrationTests.csproj" />
+    <Project Path="tests/HookGuard.UnitTests/HookGuard.UnitTests.csproj" />
+  </Folder>
+</Solution>

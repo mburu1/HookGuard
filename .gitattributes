@@ -1,0 +1,22 @@
+# Normalise line endings in the repository; check out LF everywhere so that the
+# .editorconfig `end_of_line = lf` rule holds on Windows and on CI alike.
+* text=auto eol=lf
+
+*.slnx text
+*.cs text
+*.csproj text
+*.props text
+*.json text
+*.yml text
+*.yaml text
+*.md text
+Dockerfile text
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.snk binary
