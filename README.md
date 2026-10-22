@@ -328,7 +328,7 @@ Estimates assume about 10 to 15 focused hours a week. **Each phase ends in somet
 - [x] **M1.3** `POST /hooks/{sourceId}`: raw-body read, HMAC verify, timestamp tolerance
 - [x] **M1.4** Persist-then-ack; duplicate returns `200` without re-processing
 - [x] **M1.5** Unit tests: valid, tampered, wrong secret, expired and future timestamps, constant-time compare
-- [ ] **M1.6** Integration test: 100 concurrent identical deliveries produce exactly 1 stored event
+- [x] **M1.6** Integration test: 100 concurrent identical deliveries produce exactly 1 stored event
 
 **Done when:** you can `curl` a signed payload and see it stored once, and bad signatures get `401`.
 
