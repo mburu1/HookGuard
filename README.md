@@ -323,11 +323,11 @@ Estimates assume about 10 to 15 focused hours a week. **Each phase ends in somet
 
 ### Phase 1: Core ingest and verification (Weeks 2 to 3)
 
-- [ ] **M1.1** Domain: `Source`, `Event`, `SignatureVerifier`, `Clock` abstraction
+- [x] **M1.1** Domain: `Source`, `Event`, `SignatureVerifier`, `Clock` abstraction
 - [ ] **M1.2** EF Core model, first migration, `events` unique index on `(source_id, dedupe_key)`
 - [ ] **M1.3** `POST /hooks/{sourceId}`: raw-body read, HMAC verify, timestamp tolerance
 - [ ] **M1.4** Persist-then-ack; duplicate returns `200` without re-processing
-- [ ] **M1.5** Unit tests: valid, tampered, wrong secret, expired and future timestamps, constant-time compare
+- [x] **M1.5** Unit tests: valid, tampered, wrong secret, expired and future timestamps, constant-time compare
 - [ ] **M1.6** Integration test: 100 concurrent identical deliveries produce exactly 1 stored event
 
 **Done when:** you can `curl` a signed payload and see it stored once, and bad signatures get `401`.
