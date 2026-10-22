@@ -7,6 +7,11 @@ namespace HookGuard.Infrastructure.Persistence.Configurations;
 
 internal sealed class EventConfiguration : IEntityTypeConfiguration<Event>
 {
+    /// <summary>
+    /// Named so the repository can tell this constraint apart from any other unique violation.
+    /// </summary>
+    internal const string DedupeIndexName = "ux_events_source_id_dedupe_key";
+
     public void Configure(EntityTypeBuilder<Event> builder)
     {
         ArgumentNullException.ThrowIfNull(builder);
@@ -52,6 +57,6 @@ internal sealed class EventConfiguration : IEntityTypeConfiguration<Event>
         // and is acknowledged as a duplicate.
         builder.HasIndex(@event => new { @event.SourceId, @event.DedupeKey })
             .IsUnique()
-            .HasDatabaseName("ux_events_source_id_dedupe_key");
+            .HasDatabaseName(DedupeIndexName);
     }
 }

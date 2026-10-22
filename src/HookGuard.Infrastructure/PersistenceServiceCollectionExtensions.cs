@@ -1,4 +1,6 @@
+using HookGuard.Application.Abstractions;
 using HookGuard.Infrastructure.Persistence;
+using HookGuard.Infrastructure.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -19,6 +21,9 @@ public static class PersistenceServiceCollectionExtensions
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
         services.AddDbContext<HookGuardDbContext>(options => options.UseNpgsql(connectionString));
+
+        services.AddScoped<ISourceRepository, SourceRepository>();
+        services.AddScoped<IEventRepository, EventRepository>();
 
         return services;
     }
