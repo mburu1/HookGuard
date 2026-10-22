@@ -117,15 +117,9 @@ public sealed class RabbitMqDispatcher : IDispatcher, IAsyncDisposable
 
         // Declared before the first publish rather than in a separate topology step, so publishing
         // can never race the queue's existence and be returned as unroutable.
-        await _channel.QueueDeclareAsync(
-            queue: MessagingTopology.DeliveryDispatchQueue,
-            durable: true,
-            exclusive: false,
-            autoDelete: false,
-            arguments: null,
-            passive: false,
-            noWait: false,
-            cancellationToken: cancellationToken).ConfigureAwait(false);
+        await MessagingTopology
+            .DeclareDeliveryQueueAsync(_channel, passive: false, cancellationToken)
+            .ConfigureAwait(false);
 
         return _channel;
     }
