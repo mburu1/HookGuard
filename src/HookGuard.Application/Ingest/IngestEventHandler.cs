@@ -1,5 +1,8 @@
 using HookGuard.Application.Abstractions;
+using HookGuard.Domain.Deliveries;
+using HookGuard.Domain.Destinations;
 using HookGuard.Domain.Events;
+using HookGuard.Domain.Outbox;
 using HookGuard.Domain.Signatures;
 using HookGuard.Domain.Time;
 
@@ -12,11 +15,16 @@ namespace HookGuard.Application.Ingest;
 /// </summary>
 public sealed class IngestEventHandler(
     ISourceRepository sources,
+    IDestinationRepository destinations,
     IEventRepository events,
     SignatureVerifier verifier,
     IClock clock)
 {
     private readonly ISourceRepository _sources = sources ?? throw new ArgumentNullException(nameof(sources));
+
+    private readonly IDestinationRepository _destinations =
+        destinations ?? throw new ArgumentNullException(nameof(destinations));
+
     private readonly IEventRepository _events = events ?? throw new ArgumentNullException(nameof(events));
     private readonly SignatureVerifier _verifier = verifier ?? throw new ArgumentNullException(nameof(verifier));
     private readonly IClock _clock = clock ?? throw new ArgumentNullException(nameof(clock));
@@ -49,17 +57,35 @@ public sealed class IngestEventHandler(
             return IngestResult.Rejected(verification.Failure);
         }
 
+        var now = _clock.UtcNow;
         var @event = Event.Record(
             Guid.CreateVersion7(),
             source.Id,
             EventDedupeKey.Resolve(headers, body.Span),
             headers,
             body,
-            _clock.UtcNow,
+            now,
             signatureValid: true);
 
-        return await _events.TryAddAsync(@event, cancellationToken).ConfigureAwait(false)
+        // Fan out before storing: the deliveries commit with the event, so the provider is only
+        // acknowledged once the work to deliver it is durable too. On a duplicate the same commit is
+        // refused as a whole, which is why a redelivered callback cannot queue a second delivery.
+        var deliveries = FanOut(@event, await _destinations
+            .ListActiveAsync(source.Id, cancellationToken)
+            .ConfigureAwait(false), now);
+
+        var outbox = deliveries
+            .Select(delivery => OutboxMessage.AnnounceDelivery(Guid.CreateVersion7(), delivery.Id, now))
+            .ToArray();
+
+        return await _events.TryAddAsync(new IngestCommit(@event, deliveries, outbox), cancellationToken)
+            .ConfigureAwait(false)
             ? IngestResult.Accepted(@event.Id)
             : IngestResult.Duplicate();
     }
+
+    private static Delivery[] FanOut(
+        Event @event, IReadOnlyList<Destination> destinations, DateTimeOffset now) =>
+        [.. destinations.Select(destination =>
+            Delivery.Schedule(Guid.CreateVersion7(), @event.Id, destination.Id, now))];
 }

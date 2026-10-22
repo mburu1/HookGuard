@@ -1,4 +1,5 @@
 using System.Text.Json;
+using HookGuard.Domain.Deliveries;
 using HookGuard.Domain.Sources;
 using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
@@ -39,6 +40,22 @@ internal static class Conversions
     public static ValueConverter<TimeSpan, int> Seconds { get; } = new(
         duration => (int)duration.TotalSeconds,
         seconds => TimeSpan.FromSeconds(seconds));
+
+    /// <summary>
+    /// Per-attempt budget, stored in milliseconds because that is the unit an HTTP timeout is
+    /// configured in and sub-second precision matters when a destination is slow, not broken.
+    /// </summary>
+    public static ValueConverter<TimeSpan, int> Milliseconds { get; } = new(
+        duration => (int)duration.TotalMilliseconds,
+        milliseconds => TimeSpan.FromMilliseconds(milliseconds));
+
+    /// <summary>
+    /// Delivery status travels as its name: the partial index that finds due work filters on the
+    /// stored value, so a stored row has to read the same as the enumeration.
+    /// </summary>
+    public static ValueConverter<DeliveryStatus, string> StatusName { get; } = new(
+        status => status.ToString(),
+        name => Enum.Parse<DeliveryStatus>(name));
 
     /// <summary>
     /// The scheme travels as its stable name, so a stored source keeps working when the

@@ -1,4 +1,7 @@
+using HookGuard.Domain.Deliveries;
+using HookGuard.Domain.Destinations;
 using HookGuard.Domain.Events;
+using HookGuard.Domain.Outbox;
 using HookGuard.Domain.Sources;
 using Microsoft.EntityFrameworkCore;
 
@@ -12,7 +15,13 @@ public sealed class HookGuardDbContext(DbContextOptions<HookGuardDbContext> opti
 {
     public DbSet<Source> Sources => Set<Source>();
 
+    public DbSet<Destination> Destinations => Set<Destination>();
+
     public DbSet<Event> Events => Set<Event>();
+
+    public DbSet<Delivery> Deliveries => Set<Delivery>();
+
+    public DbSet<OutboxMessage> OutboxMessages => Set<OutboxMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

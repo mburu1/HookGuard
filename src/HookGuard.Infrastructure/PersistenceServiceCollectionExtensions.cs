@@ -23,6 +23,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddDbContext<HookGuardDbContext>(options => options.UseNpgsql(connectionString));
 
         services.AddScoped<ISourceRepository, SourceRepository>();
+        services.AddScoped<IDestinationRepository, DestinationRepository>();
         services.AddScoped<IEventRepository, EventRepository>();
 
         return services;
