@@ -26,6 +26,7 @@ public static class PersistenceServiceCollectionExtensions
         services.AddScoped<IDestinationRepository, DestinationRepository>();
         services.AddScoped<IEventRepository, EventRepository>();
         services.AddScoped<IOutboxStore, OutboxStore>();
+        services.AddScoped<IDeliveryStore, DeliveryStore>();
 
         return services;
     }

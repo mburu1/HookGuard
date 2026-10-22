@@ -74,6 +74,13 @@ public sealed class Delivery
     /// <summary>When this delivery becomes eligible for another attempt.</summary>
     public DateTimeOffset NextAttemptAt { get; private set; }
 
+    /// <summary>
+    /// When the attempt in flight was claimed, or <see langword="null"/> while nothing is holding this
+    /// row. It is the only evidence that a worker took the delivery and never came back, which is what
+    /// the visibility timeout reads to hand the row over again.
+    /// </summary>
+    public DateTimeOffset? ClaimedAt { get; private set; }
+
     /// <summary>Why the last attempt failed, as the worker saw it. Null until one has failed.</summary>
     public string? LastError { get; private set; }
 
@@ -83,12 +90,13 @@ public sealed class Delivery
     /// mid-attempt still leaves it counted, so a crash loop cannot retry for ever without spending
     /// its budget.
     /// </summary>
+    /// <param name="at">When the attempt was claimed, for the visibility timeout to measure from.</param>
     /// <remarks>
     /// In production this transition is part of one guarded <c>UPDATE</c>, so that the database decides
     /// which of two racing workers owns the delivery; this method is that same transition where it is
     /// decided in memory instead.
     /// </remarks>
-    public void BeginAttempt()
+    public void BeginAttempt(DateTimeOffset at)
     {
         if (Status != DeliveryStatus.Pending)
         {
@@ -98,6 +106,7 @@ public sealed class Delivery
 
         Status = DeliveryStatus.InFlight;
         AttemptCount++;
+        ClaimedAt = at;
     }
 
     /// <summary>
@@ -107,6 +116,7 @@ public sealed class Delivery
     public void Succeed()
     {
         Status = DeliveryStatus.Succeeded;
+        ClaimedAt = null;
         LastError = null;
     }
 
@@ -125,5 +135,6 @@ public sealed class Delivery
         Status = DeliveryStatus.Pending;
         LastError = error.Length > LastErrorMaxLength ? error[..LastErrorMaxLength] : error;
         NextAttemptAt = nextAttemptAt;
+        ClaimedAt = null;
     }
 }

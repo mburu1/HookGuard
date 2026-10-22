@@ -34,6 +34,10 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
 
         builder.Property(delivery => delivery.NextAttemptAt).HasColumnName("next_attempt_at").IsRequired();
 
+        // Null while nothing holds the row, which is what makes "nobody's attempt" and "somebody's
+        // attempt, started at this instant" two different states rather than one.
+        builder.Property(delivery => delivery.ClaimedAt).HasColumnName("claimed_at");
+
         builder.Property(delivery => delivery.LastError).HasColumnName("last_error").HasMaxLength(2000);
 
         builder.HasOne<Event>()
@@ -51,5 +55,11 @@ internal sealed class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
         builder.HasIndex(delivery => delivery.NextAttemptAt)
             .HasDatabaseName("ix_deliveries_due")
             .HasFilter("status IN ('Pending')");
+
+        // The visibility timeout's query, indexed the same way and for the same reason: only rows an
+        // attempt is holding can be stuck, and those are a vanishing fraction of the table.
+        builder.HasIndex(delivery => delivery.ClaimedAt)
+            .HasDatabaseName("ix_deliveries_in_flight")
+            .HasFilter("status IN ('InFlight')");
     }
 }

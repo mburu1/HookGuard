@@ -338,7 +338,7 @@ Estimates assume about 10 to 15 focused hours a week. **Each phase ends in somet
 - [x] **M2.2** RabbitMQ topology: work queue, prefetch, manual acks
 - [x] **M2.3** Delivery worker with typed `HttpClient`, timeouts, outgoing signature, `Idempotency-Key`
 - [x] **M2.4** Exponential backoff with full jitter (injected `IRandom` and `IClock`), unit tested
-- [ ] **M2.5** Scheduler sweep for due retries and visibility-timeout recovery for stuck `InFlight`
+- [x] **M2.5** Scheduler sweep for due retries and visibility-timeout recovery for stuck `InFlight`
 - [ ] **M2.6** Dead-letter state after N attempts
 - [ ] **M2.7** Failure-injection test: stop destination, send 1,000 events, restart destination, assert all 1,000 delivered and none duplicated by HookGuard
 

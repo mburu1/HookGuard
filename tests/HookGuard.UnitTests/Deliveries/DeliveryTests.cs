@@ -20,6 +20,38 @@ public class DeliveryTests
         delivery.AttemptCount.Should().Be(0);
         delivery.NextAttemptAt.Should().Be(Now, "a delivery with no failure behind it is due at once");
         delivery.LastError.Should().BeNull();
+        delivery.ClaimedAt.Should().BeNull("nobody holds a delivery that has not been attempted");
+    }
+
+    [Fact]
+    public void Dates_the_claim_so_a_lost_attempt_can_be_told_from_a_slow_one()
+    {
+        var delivery = Schedule();
+        var claimedAt = Now.AddSeconds(7);
+
+        delivery.BeginAttempt(claimedAt);
+
+        delivery.ClaimedAt.Should().Be(claimedAt, "the visibility timeout measures the attempt from this instant");
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void Releases_the_claim_when_the_attempt_is_recorded(bool succeeded)
+    {
+        var delivery = Schedule();
+        delivery.BeginAttempt(Now);
+
+        if (succeeded)
+        {
+            delivery.Succeed();
+        }
+        else
+        {
+            delivery.Fail("The destination answered HTTP 503.", Now.AddSeconds(30));
+        }
+
+        delivery.ClaimedAt.Should().BeNull("nothing is holding a delivery whose attempt has ended");
     }
 
     [Fact]
@@ -27,7 +59,7 @@ public class DeliveryTests
     {
         var delivery = Schedule();
 
-        delivery.BeginAttempt();
+        delivery.BeginAttempt(Now);
 
         delivery.Status.Should().Be(DeliveryStatus.InFlight, "a claimed delivery is one somebody is working on");
         delivery.AttemptCount.Should().Be(1, "a worker that dies mid-attempt has still spent the attempt");
@@ -37,9 +69,9 @@ public class DeliveryTests
     public void Refuses_a_second_attempt_on_a_delivery_somebody_already_holds()
     {
         var delivery = Schedule();
-        delivery.BeginAttempt();
+        delivery.BeginAttempt(Now);
 
-        var act = delivery.BeginAttempt;
+        var act = () => delivery.BeginAttempt(Now);
 
         act.Should().Throw<InvalidOperationException>("two workers must not both count themselves as the attempt");
     }

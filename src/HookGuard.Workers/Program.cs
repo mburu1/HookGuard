@@ -28,9 +28,11 @@ builder.Services.AddSingleton<IRandom, SystemRandom>();
 builder.Services.AddSingleton<RetryPolicy>();
 builder.Services.AddScoped<OutboxRelay>();
 builder.Services.AddScoped<DeliveryWorker>();
+builder.Services.AddScoped<DeliveryScheduler>();
 
 builder.Services.AddHostedService<OutboxRelayService>();
 builder.Services.AddHostedService<DeliveryWorkerService>();
+builder.Services.AddHostedService<DeliverySweepService>();
 
 var host = builder.Build();
 host.Run();

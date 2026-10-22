@@ -32,6 +32,10 @@ namespace HookGuard.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("attempt_count");
 
+                    b.Property<DateTimeOffset?>("ClaimedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("claimed_at");
+
                     b.Property<Guid>("DestinationId")
                         .HasColumnType("uuid")
                         .HasColumnName("destination_id");
@@ -56,6 +60,10 @@ namespace HookGuard.Infrastructure.Persistence.Migrations
                         .HasColumnName("status");
 
                     b.HasKey("Id");
+
+                    b.HasIndex("ClaimedAt")
+                        .HasDatabaseName("ix_deliveries_in_flight")
+                        .HasFilter("status IN ('InFlight')");
 
                     b.HasIndex("DestinationId");
 
