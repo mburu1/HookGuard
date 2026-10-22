@@ -75,6 +75,8 @@ services:
       dockerfile: src/HookGuard.Workers/Dockerfile
     environment:
       DOTNET_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
+      ConnectionStrings__HookGuard: "Host=postgres;Port=5432;Database=${POSTGRES_DB:-hookguard};Username=${POSTGRES_USER:-hookguard};Password=${POSTGRES_PASSWORD:-hookguard}"
+      ConnectionStrings__RabbitMq: "amqp://${RABBITMQ_USER:-hookguard}:${RABBITMQ_PASSWORD:-hookguard}@rabbitmq:5672/"
       Dependencies__Postgres: postgres:5432
       Dependencies__Redis: redis:6379
       Dependencies__RabbitMq: rabbitmq:5672

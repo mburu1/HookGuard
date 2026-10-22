@@ -334,7 +334,7 @@ Estimates assume about 10 to 15 focused hours a week. **Each phase ends in somet
 
 ### Phase 2: Reliability engine (Weeks 4 to 5)
 
-- [ ] **M2.1** Transactional outbox + relay with publisher confirms
+- [x] **M2.1** Transactional outbox + relay with publisher confirms
 - [ ] **M2.2** RabbitMQ topology: work queue, prefetch, manual acks
 - [ ] **M2.3** Delivery worker with typed `HttpClient`, timeouts, outgoing signature, `Idempotency-Key`
 - [ ] **M2.4** Exponential backoff with full jitter (injected `IRandom` and `IClock`), unit tested
